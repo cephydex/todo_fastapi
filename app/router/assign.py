@@ -1,0 +1,105 @@
+from fastapi import APIRouter, status, Depends
+import logging
+from config.logconf import LOGGER_NAME
+from sqlalchemy.orm import Session
+
+from .. import models
+from ..database import get_db
+from app.auth.auth_bearer import JWTBearer
+from typing import List
+
+router = APIRouter(
+    dependencies=[ Depends(JWTBearer()) ],
+    responses={404: {"description": "Not found"}},
+)
+log = logging.getLogger(LOGGER_NAME)
+
+
+@router.get("/", status_code=status.HTTP_200_OK)
+async def get_assignments(db: Session = Depends(get_db)):
+    
+    todos = (
+        db.query(models.Todo, models.User)
+            .with_entities(
+                models.User.id.label('user_id')
+                , models.Todo.id.label('todo_id')
+                , models.Todo.title
+                , models.Todo.content
+                , models.Todo.category
+                , models.Todo.created_at
+            )
+            .filter(
+                models.user_todo.c.todo_id == models.Todo.id,
+                models.user_todo.c.user_id == models.User.id
+            )        
+            .order_by(models.Todo.created_at)
+            .all()
+    )
+
+    log.info("Todo assignments retrieved")
+    return {"message": "Todo assignments retrieved!", 'data': todos, 'success': True}
+
+
+@router.get("/{userId}", status_code=status.HTTP_200_OK)
+async def get_user_todos(userId: str, db: Session = Depends(get_db)):
+    
+    result = (
+        db.query(models.Todo, models.User)
+        .with_entities(
+            models.User.id.label('user_id')
+            , models.Todo.id.label('todo_id')
+            , models.Todo.title
+            , models.Todo.content
+            , models.Todo.category
+            , models.Todo.created_at
+        )
+        .filter(
+            models.user_todo.c.user_id == userId, 
+            models.user_todo.c.todo_id == models.Todo.id,
+            models.user_todo.c.user_id == models.User.id
+        )        
+        .order_by(models.Todo.created_at)
+        .all()
+    )
+
+    log.info("Todo assignments retrieved for user: "+ userId)
+    return {"message": "Todo assignments retrieved!", 'data': result, 'success': True}
+
+
+@router.post("/{userId}", status_code=status.HTTP_201_CREATED)
+async def assign_todo(userId: str, data: List[str], db: Session = Depends(get_db)):
+    user = db.query(models.User).get(int(userId))
+    if len(data) > 1:
+        # reset mapping
+        user.todos = []
+        db.commit()
+
+        for todoId in data:
+            todo = db.query(models.Todo).get(int(todoId))
+            
+            # check for empty todo object
+            if todo is not None:
+                user.todos .append(todo)
+                # print(f'todo appended to {user}')
+                
+        db.add(user)
+        db.commit()
+        db.refresh(user)    
+
+    log.info(f"Todos asigned to {user} successfully")
+    return {"message": "Todo updated successfully!", "data": user, 'success': True}
+
+
+@router.delete("/{userId}", status_code=status.HTTP_200_OK)
+async def unassign_todo(userId: str, db: Session = Depends(get_db)):
+    user = (
+                db.query(models.User)
+                    .filter(models.User.id == userId)
+                    .first()
+            )
+    # reset mapping
+    user.todos = []
+    db.commit()
+
+    log.info("Assigned todos removed for user with Id: {userId}")
+    return {'message': "Todos removed successfully!", "data": user, 'success': True}
