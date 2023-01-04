@@ -2,11 +2,11 @@ from fastapi import APIRouter, status, Depends
 import logging
 from config.logconf import LOGGER_NAME
 from sqlalchemy.orm import Session
-
 from .. import models
 from ..database import get_db
 from app.auth.auth_bearer import JWTBearer
 from typing import List
+from config.conf import settings
 
 router = APIRouter(
     dependencies=[ Depends(JWTBearer()) ],
@@ -69,25 +69,34 @@ async def get_user_todos(userId: str, db: Session = Depends(get_db)):
 @router.post("/{userId}", status_code=status.HTTP_201_CREATED)
 async def assign_todo(userId: str, data: List[str], db: Session = Depends(get_db)):
     user = db.query(models.User).get(int(userId))
-    if len(data) > 1:
-        # reset mapping
+    max_assign = int(settings.max_assigned)
+    data_count = len(data)
+    message = "Sorry assignment not completed"
+    # todoId = int(todoId)
+    # log.warn("MA assign: {max_assign}")
+    # return {"data": max_assign}
+
+    if data_count <= max_assign and data_count > 1:
+        # remove assignments
         user.todos = []
         db.commit()
 
         for todoId in data:
-            todo = db.query(models.Todo).get(int(todoId))
+            todo = db.query(models.Todo).get(todoId)
             
             # check for empty todo object
             if todo is not None:
                 user.todos .append(todo)
-                # print(f'todo appended to {user}')
                 
         db.add(user)
         db.commit()
-        db.refresh(user)    
+        db.refresh(user)
+        log.info(f"Todos asigned to {user} successfully")
+        message = "Todo updated successfully!"
+    else:
+        message = "Sorry assignment has reached max limit"
 
-    log.info(f"Todos asigned to {user} successfully")
-    return {"message": "Todo updated successfully!", "data": user, 'success': True}
+    return {"message": message, 'success': True}
 
 
 @router.delete("/{userId}", status_code=status.HTTP_200_OK)

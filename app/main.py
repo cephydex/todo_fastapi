@@ -3,14 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import logging
 from logging.config import dictConfig
-# from .db import database, TUser
 from app.router import todo, user, assign
 from config.logconf import log_config, LOGGER_NAME
 from config.conf import settings
 # from fastapi_redis_cache import FastApiRedisCache, cache
 from sqlalchemy.orm import Session
 from .database import db_init
-# import os
 
 dictConfig(log_config)
 app = FastAPI(title="Fast with Docker", debug=True)
